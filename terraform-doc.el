@@ -4,7 +4,7 @@
 
 ;; Author: Giap Tran <txgvnn@gmail.com>
 ;; URL: https://github.com/TxGVNN/terraform-doc
-;; Version: 1.0.1
+;; Version: 1.2.0
 ;; Package-Requires: ((emacs "24.4"))
 ;; Keywords: comm
 
@@ -31,7 +31,7 @@
 (require 'shr)
 
 (defgroup terraform nil
-  "Major mode of terraform-doc file."
+  "Major mode of `terraform-doc' file."
   :group 'languages
   :prefix "terraform-doc-")
 
@@ -69,13 +69,12 @@
   "Look up PROVIDER."
   (interactive (list
                 (assoc (completing-read
-                             "Provider: "
-                             (mapcar (lambda (x) (car x)) terraform-doc-providers))
-                            terraform-doc-providers)))
+                        "Provider: "
+                        (mapcar (lambda (x) (car x)) terraform-doc-providers))
+                       terraform-doc-providers)))
   (if (member provider terraform-doc-providers)
       (terraform-doc--render-tree (cdr provider) (format "*Terraform:%s*" (cdr provider)))
-      (message "%s" (propertize "Provider is not valid"))))
-
+    (message "%s" (propertize "Provider is not valid"))))
 
 (defun terraform-doc-at-point()
   "Render url by 'terraform-doc--render-object."
@@ -83,7 +82,7 @@
   (if (get-text-property (point) 'shr-url)
       (let* ((url (get-text-property (point) 'shr-url))
              (buffer-name (string-join (last (split-string url "/") 2) "/"))
-             (provider (replace-regexp-in-string ".*terraform-provider-\\(.*\\)/master/.*" "\\1" url)))
+             (provider (replace-regexp-in-string ".*terraform-provider-\\(.+?\\)/.*" "\\1" url)))
         (terraform-doc--render-object url (format "*Terraform:%s:%s*" provider buffer-name)))))
 
 (defun terraform-doc--render-tree (provider buffer-name)
@@ -91,25 +90,25 @@
   (if (get-buffer buffer-name)
       (switch-to-buffer buffer-name)
     (with-current-buffer (get-buffer-create buffer-name)
-      (insert (format "<a href=\"/terraform-providers/terraform-provider-%s/master/website/docs/index.html.markdown\">Provider</a><br/>" provider))
+      (insert (format "<a href=\"/terraform-providers/terraform-provider-%s/HEAD/website/docs/index.html.markdown\">Provider</a><br/>" provider))
       (let ((content))
         (dolist (url '("d" "r"))
           (with-current-buffer
-	    (terraform-doc-get-url provider "master" url)
-	    (if (string= "HTTP/1.1 404" (buffer-substring 1 13)) (switch-to-buffer (terraform-doc-get-url provider "main" url)))
+             (url-retrieve-synchronously
+               (format "https://github.com/terraform-providers/terraform-provider-%s/file-list/HEAD/website/docs/%s" provider url))
             (goto-char (point-min))
             (search-forward-regexp "\n\n" )
             (delete-region (point) (point-min))
             (let* ((html-dom-tree (libxml-parse-html-region (point-min) (point-max)))
                    (dives (dom-elements html-dom-tree 'role "rowheader"))
-                   (j 0) (div nil) (file nil))
+                   (j 0) (div nil) (file nil) (url_type nil) (formatted_str nil))
               (erase-buffer)
               (while (< j (length dives))
                 (setq div (elt dives j))
                 (setq file (dom-by-class div "Link--primary"))
                 (unless (not file)
-		  (set 'url_type (if (string= "d" url) "data" "resource"))
-		  (set 'formatted_str (car (split-string (dom-text file) "\\.")))
+                  (setq url_type (if (string= "d" url) "data" "resource"))
+                  (setq formatted_str (car (split-string (dom-text file) "\\.")))
                   (setcdr (cdr (car file)) (list (format "%s/%s" url_type formatted_str)))
                   (xml-print file)
                   (insert "<br/>"))
